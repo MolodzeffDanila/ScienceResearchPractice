@@ -12,8 +12,8 @@ from itertools import chain
 
 from rcrs_core.worldmodel.entityID import EntityID
 
-from rcrs_sample.agents.node import Node
-from rcrs_sample.agents.utils import from_id_list_to_entity_id
+from src.agents.node import Node
+from src.agents.utils import from_id_list_to_entity_id, from_entity_id_to_id_list
 
 
 class PoliceForceAgent(Agent):
@@ -22,9 +22,12 @@ class PoliceForceAgent(Agent):
         self.name = 'PoliceForceAgent'
         self.found_refuge = False
         self.refuge = None
-    
+        self.visited_roads = set()  # Множество для хранения посещенных дорог
+        self.roads_to_explore = None
+        self.state = "FIND_REFUGE"
+
     def precompute(self):
-        self.Log.info('precompute finshed')
+        self.Log.info('precompute finished')
 
     def get_requested_entities(self):
         return [URN.Entity.POLICE_FORCE]
@@ -45,31 +48,51 @@ class PoliceForceAgent(Agent):
 
     def think(self, time_step, change_set, heard):
         self.Log.info(time_step)
+
         if time_step == self.config.get_value(kernel_constants.IGNORE_AGENT_COMMANDS_KEY):
             self.send_subscribe(time_step, [1, 2])
+        #print(heard) Приходит что-то супернепонятное, но услышать агентов можно
 
-        if self.refuge is not None and self.location().get_id().get_value() == self.refuge.get_value():
-            self.found_refuge = True
+        if self.state == "FIND_REFUGE":
+            self.find_refuge_state(time_step)
+        if self.state == "CLEAR":
+            self.clear_blockade_state(time_step)
+        if self.state == "MOVE_NEXT":
+            self.move_to_next_state(time_step)
 
-        if not self.found_refuge:
-            self.refuge = self.get_nearest_refuge_road()
-            path = self.find_way(self.refuge)
-            if isinstance(self.location(), Road):
-                target = self.get_nearest_blockade_on_path(path)
-                if target:
-                    self.send_clear(time_step, target)
-                    return
-            self.send_move(time_step, path)
+    def clear_blockade_state(self, time_step):
+        target = self.get_nearest_blockade_on_path(self.roads_to_explore)
+
+        if target:
+            blockade = self.world_model.get_entity(target)
+            self.send_clear(time_step, target)
+            return
         else:
-            nearest_blockade = self.get_nearest_blockade()
-            path = self.find_way(nearest_blockade)
-            if path:
-                self.send_move(time_step, path)
-                self.send_clear(time_step, nearest_blockade)
-                return
+            blockades = self.world_model.get_entity(EntityID(self.roads_to_explore[0])).get_blockades()
+            blockades_sorted = sorted(blockades, key=lambda b: self.get_distance(self.world_model.get_entity(b), self.location()))
+            if not blockades:
+                self.state = 'MOVE_NEXT'
+                self.Log.info("From clear to move")
+                self.visited_roads.add(self.roads_to_explore[0])
+                self.roads_to_explore = self.roads_to_explore[1:]
+                self.move_to_next_state(time_step)
+            else:
+                current_road_id = self.location().get_id().get_value()
+                blockade_entity = self.world_model.get_entity(blockades_sorted[0])
+                self.send_move(time_step, [current_road_id], blockade_entity.get_x(), blockade_entity.get_y())
 
-        # self.send_say(time_step, 'HELP')
-        # self.send_speak(time_step, 'HELP meeeee police', 1)
+    def move_to_next_state(self, time_step):
+        if self.roads_to_explore:
+            current_road_id = self.location().get_id().get_value()
+            blockade = self.get_nearest_blockade()
+            blockade_ent = self.world_model.get_entity(blockade)
+            self.send_move(time_step, [self.roads_to_explore[0]])
+            if current_road_id == self.roads_to_explore[0] or blockade:
+                self.state = 'CLEAR'
+                self.Log.info('From Move to Clear')
+                self.clear_blockade_state(time_step)
+        else:
+            self.roads_to_explore = self.explore_roads()
 
     def get_nearest_refuge_road(self):
         best_distance = sys.maxsize
@@ -129,7 +152,6 @@ class PoliceForceAgent(Agent):
         x = self.me().get_x()
         y = self.me().get_y()
 
-        # Получаем все Blockade на карте
         blockades = [entity for entity in self.world_model.get_entities() if isinstance(entity, Blockade)]
 
         for blockade in blockades:
@@ -144,9 +166,6 @@ class PoliceForceAgent(Agent):
 
     def find_way(self, entity_id):
         target = self.world_model.get_entity(entity_id)
-        #blockades = [entity for entity in self.world_model.get_entities() if entity.get_urn() == URN.Entity.BLOCKADE]
-        #for blockade in blockades:
-            #print(blockade.repair_cost.get_value(), self.world_model.get_entity(blockade.get_position()))
         start_node = self.location()
 
         path = self._a_star(start_node, target)
@@ -160,44 +179,35 @@ class PoliceForceAgent(Agent):
 
         heapq.heappush(open_list, start_node)
 
-        # Инициализируем множество посещенных узлов
         closed_set = set()
 
         while open_list:
             current_node = heapq.heappop(open_list)
 
-            # Если текущий узел является конечным
             if current_node.id == target_node.id:
-                # Восстанавливаем путь от конечного узла до начального
                 path = []
                 while current_node is not None:
                     path.append(current_node.id.get_value())
                     current_node = current_node.parent
                 return path[::-1]
 
-            # Добавляем текущий узел в множество посещенных узлов
             closed_set.add(current_node.id)
 
             neighbors = [Node(neigh) for neigh in self.get_neighbors(current_node.entity)]
 
             for neighbor in neighbors:
-                # Если соседний узел уже был посещен, пропускаем его
                 if neighbor.get_id() in closed_set:
                     continue
 
                 new_g = current_node.g + self.get_distance(current_node, neighbor)
-                # Если соседний узел уже находится в очереди с приоритетами
                 if nfo := next((n for n in open_list if n.get_id() == neighbor.get_id()), None):
-                    # Если новое расстояние до соседнего узла меньше, чем старое, обновляем значения g, h и f
                     if new_g < nfo.g:
                         nfo.g = new_g
                         nfo.h = math.sqrt((target_node.get_x() - nfo.get_x()) ** 2 + (target_node.get_y() - nfo.get_y()) ** 2)
                         nfo.f = nfo.g + nfo.h
                         nfo.parent = current_node
-                        # Обновляем приоритет соседнего узла в очереди с приоритетами
                         heapq.heapify(open_list)
                 else:
-                    # Иначе добавляем соседний узел в очередь с приоритетами и вычисляем значения g, h и f
                     neighbor.g = new_g
                     neighbor.h = math.sqrt((target_node.get_x() - neighbor.get_x()) ** 2 + (target_node.get_y() - neighbor.get_y()) ** 2)
                     neighbor.f = neighbor.g + neighbor.h
@@ -212,3 +222,37 @@ class PoliceForceAgent(Agent):
         dx = abs(self.world_model.get_entity(node1.get_id()).get_x() - self.world_model.get_entity(node2.get_id()).get_x())
         dy = abs(self.world_model.get_entity(node1.get_id()).get_y() - self.world_model.get_entity(node2.get_id()).get_y())
         return dx + dy
+
+    def explore_roads(self):
+        # Выполним поиск в глубину (DFS) всех дорог, начиная с текущей
+        roads_to_explore = []
+        self._dfs(self.location(), roads_to_explore)
+        return from_entity_id_to_id_list(roads_to_explore)
+
+    def _dfs(self, current_road, roads_to_explore):
+        # Добавляем текущую дорогу в список, если она ещё не была посещена
+        if current_road.get_id() not in roads_to_explore:
+            roads_to_explore.append(current_road.get_id())
+
+            # Рекурсивно исследуем соседей
+            neighbors = self.get_neighbors(current_road)
+            for neighbor in neighbors:
+                if isinstance(neighbor, Road) and neighbor.get_id() not in roads_to_explore:
+                    self._dfs(neighbor, roads_to_explore)
+
+    def find_refuge_state(self, time_step):
+        if self.refuge is not None and self.location().get_id().get_value() == self.refuge.get_value():
+            self.found_refuge = True
+            self.state = "MOVE_NEXT"
+            self.Log.info('From refuge to Clear')
+        if not self.found_refuge:
+            self.refuge = self.get_nearest_refuge_road()
+            path = self.find_way(self.refuge)
+            if isinstance(self.location(), Road):
+                target = self.get_nearest_blockade_on_path(path)
+                if target:
+                    self.send_clear(time_step, target)
+                    return
+            self.send_move(time_step, path)
+            self.visited_roads.add(self.location().get_id().get_value())
+

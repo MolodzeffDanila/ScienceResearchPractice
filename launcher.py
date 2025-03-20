@@ -3,16 +3,16 @@ import time
 import sys
 import os
 from typing import List
-from multiprocessing import Process
+from multiprocessing import Process, set_start_method
 import ipaddress
 
 from rcrs_core.connection.componentLauncher import ComponentLauncher
-from rcrs_sample.agents.policeForceAgent import PoliceForceAgent
-from rcrs_sample.agents.ambulanceTeamAgent import AmbulanceTeamAgent
-from rcrs_sample.agents.fireBrigadeAgent import FireBrigadeAgent
-from rcrs_sample.agents.fireStationAgent import FireStationAgent
-from rcrs_sample.agents.policeOfficeAgent import PoliceOfficeAgent
-from rcrs_sample.agents.ambulanceCenterAgent import AmbulanceCenterAgent
+from src.agents.policeForceAgent import PoliceForceAgent
+from src.agents.ambulanceTeamAgent import AmbulanceTeamAgent
+from src.agents.fireBrigadeAgent import FireBrigadeAgent
+from src.agents.fireStationAgent import FireStationAgent
+from src.agents.policeOfficeAgent import PoliceOfficeAgent
+from src.agents.ambulanceCenterAgent import AmbulanceCenterAgent
 from rcrs_core.constants.constants import DEFAULT_KERNEL_PORT_NUMBER
 from rcrs_core.constants.constants import DEFAULT_KERNEL_HOST_NAME
 
@@ -116,5 +116,6 @@ def main(sys_args: List[str]):
     print("launcher exited...")
 
 if __name__ == '__main__':
+    set_start_method('fork')
     main(sys.argv)
     

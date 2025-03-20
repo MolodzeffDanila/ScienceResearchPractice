@@ -17,4 +17,4 @@ class AmbulanceCenterAgent(Agent):
         entities = self.world_model.get_entities()
 
         civilians = [entity for entity in entities if isinstance(entity, Civilian)]
-        print("AMB\n", civilians)
+        #print("AMB\n", civilians)

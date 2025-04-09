@@ -1,6 +1,3 @@
-WARNING PoliceForceAgent(0): failed 202 : No more agents
-WARNING PoliceForceAgent(0): failed 203 : No more agents
-WARNING PoliceForceAgent(0): failed 204 : No more agents
 WARNING PoliceForceAgent(0): failed 205 : No more agents
 WARNING PoliceForceAgent(0): failed 206 : No more agents
 WARNING PoliceForceAgent(0): failed 207 : No more agents
@@ -51,8 +48,8 @@ WARNING PoliceForceAgent(0): failed 251 : No more agents
 WARNING PoliceForceAgent(0): failed 252 : No more agents
 WARNING PoliceForceAgent(0): failed 253 : No more agents
 WARNING PoliceForceAgent(0): failed 254 : No more agents
-WARNING PoliceForceAgent(0): failed 256 : No more agents
 WARNING PoliceForceAgent(0): failed 255 : No more agents
+WARNING PoliceForceAgent(0): failed 256 : No more agents
 WARNING PoliceForceAgent(0): failed 257 : No more agents
 WARNING PoliceForceAgent(0): failed 258 : No more agents
 WARNING PoliceForceAgent(0): failed 259 : No more agents
@@ -97,34 +94,3 @@ WARNING PoliceForceAgent(0): failed 297 : No more agents
 WARNING PoliceForceAgent(0): failed 298 : No more agents
 WARNING PoliceForceAgent(0): failed 299 : No more agents
 WARNING PoliceForceAgent(0): failed 300 : No more agents
-INFO PoliceForceAgent(1962675462): 1
-INFO PoliceForceAgent(1962675462): 2
-INFO PoliceForceAgent(1962675462): 3
-INFO PoliceForceAgent(1962675462): 4
-INFO PoliceForceAgent(1962675462): 5
-INFO PoliceForceAgent(1962675462): From refuge to Clear
-INFO PoliceForceAgent(1962675462): 6
-INFO PoliceForceAgent(1962675462): From Move to Clear
-INFO PoliceForceAgent(1962675462): 7
-INFO PoliceForceAgent(1962675462): 8
-INFO PoliceForceAgent(1962675462): 9
-INFO PoliceForceAgent(1962675462): From clear to move
-INFO PoliceForceAgent(1962675462): From Move to Clear
-INFO PoliceForceAgent(1962675462): 10
-INFO PoliceForceAgent(1962675462): 11
-INFO PoliceForceAgent(1962675462): 12
-INFO PoliceForceAgent(1962675462): 13
-INFO PoliceForceAgent(1962675462): 14
-INFO PoliceForceAgent(1962675462): 15
-INFO PoliceForceAgent(1962675462): 16
-INFO PoliceForceAgent(1962675462): 17
-INFO PoliceForceAgent(1962675462): 18
-INFO PoliceForceAgent(1962675462): 19
-INFO PoliceForceAgent(1962675462): 20
-INFO PoliceForceAgent(1962675462): 21
-INFO PoliceForceAgent(1962675462): 22
-INFO PoliceForceAgent(1962675462): 23
-INFO PoliceForceAgent(1962675462): 24
-INFO PoliceForceAgent(1962675462): 25
-INFO PoliceForceAgent(1962675462): 26
-INFO PoliceForceAgent(1962675462): 27

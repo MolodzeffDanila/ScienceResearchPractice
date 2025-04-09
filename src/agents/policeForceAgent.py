@@ -2,6 +2,7 @@ from rcrs_core.agents.agent import Agent
 from rcrs_core.constants import kernel_constants
 from rcrs_core.connection import URN
 from rcrs_core.entities.blockade import Blockade
+from rcrs_core.entities.building import Building
 from rcrs_core.entities.road import Road
 from rcrs_core.entities.human import Human
 from rcrs_core.entities.refuge import Refuge
@@ -53,6 +54,10 @@ class PoliceForceAgent(Agent):
             self.send_subscribe(time_step, [1, 2])
         #print(heard) Приходит что-то супернепонятное, но услышать агентов можно
 
+        self.visited_roads.add(self.location().get_id())
+
+        print(self.world_model.get_entity(EntityID(263)).get_blockades())
+
         if self.state == "FIND_REFUGE":
             self.find_refuge_state(time_step)
         if self.state == "CLEAR":
@@ -62,9 +67,12 @@ class PoliceForceAgent(Agent):
 
     def clear_blockade_state(self, time_step):
         target = self.get_nearest_blockade_on_path(self.roads_to_explore)
-
+        if isinstance(self.location(), Building):
+            roads = self.get_neighbors(self.location())
+            self.roads_to_explore = roads
+            self.move_to_next_state(time_step)
+            return
         if target:
-            blockade = self.world_model.get_entity(target)
             self.send_clear(time_step, target)
             return
         else:
@@ -85,7 +93,6 @@ class PoliceForceAgent(Agent):
         if self.roads_to_explore:
             current_road_id = self.location().get_id().get_value()
             blockade = self.get_nearest_blockade()
-            blockade_ent = self.world_model.get_entity(blockade)
             self.send_move(time_step, [self.roads_to_explore[0]])
             if current_road_id == self.roads_to_explore[0] or blockade:
                 self.state = 'CLEAR'
@@ -230,14 +237,15 @@ class PoliceForceAgent(Agent):
         return from_entity_id_to_id_list(roads_to_explore)
 
     def _dfs(self, current_road, roads_to_explore):
-        # Добавляем текущую дорогу в список, если она ещё не была посещена
-        if current_road.get_id() not in roads_to_explore:
-            roads_to_explore.append(current_road.get_id())
+        # Добавляем текущую дорогу в список
+        roads_to_explore.append(current_road.get_id())
 
-            # Рекурсивно исследуем соседей
-            neighbors = self.get_neighbors(current_road)
-            for neighbor in neighbors:
-                if isinstance(neighbor, Road) and neighbor.get_id() not in roads_to_explore:
+        # Рекурсивно исследуем соседей
+        neighbors = self.get_neighbors(current_road)
+        for neighbor in neighbors:
+            if isinstance(neighbor, Road):
+                # Мы не проверяем visited_roads для обхода в глубину, но учитываем текущий обход
+                if neighbor.get_id() not in roads_to_explore and neighbor.get_id() not in self.visited_roads:
                     self._dfs(neighbor, roads_to_explore)
 
     def find_refuge_state(self, time_step):

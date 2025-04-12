@@ -18,6 +18,8 @@ class PoliceForceAgent(Agent):
         Agent.__init__(self, pre)
         self.name = 'PoliceForceAgent'
         self.visited_houses = set()
+        self.broken_blockades = set()
+        self.recent_blockade_repair_cost = -1
 
     def precompute(self):
         self.Log.info('precompute finshed')
@@ -45,33 +47,54 @@ class PoliceForceAgent(Agent):
         buildings = self.get_sorted_buildings()
 
         if not buildings:
-            self.move_nearest_blockade(time_step)
+            blockade = self.get_nearest_blockade()
+
+            if blockade:
+                self.move_nearest_blockade(time_step, blockade)
             return
         if isinstance(self.location(), Building):
             self.visited_houses.add(self.location())
 
             buildings = buildings[1:]
             if not buildings:
-                self.move_nearest_blockade(time_step)
+                blockade = self.get_nearest_blockade()
+
+                if blockade:
+                    self.move_nearest_blockade(time_step, blockade)
                 return
             path = self.find_way(buildings[0].get_id())
             self.send_move(time_step, path)
         else:
             path = self.find_way(buildings[0].get_id())
-            if isinstance(self.location(), Road):
-                target = self.get_nearest_blockade_on_path(path)
-                if target:
-                    self.send_clear(time_step, target)
-                    return
+            self.move_nearest_blockade_on_path(time_step, path)
             self.send_move(time_step, path)
 
-    def move_nearest_blockade(self, time_step):
+    def move_nearest_blockade(self, time_step, blockade_id):
+        x = self.me().get_x()
+        y = self.me().get_y()
+
+        blockade = self.world_model.get_entity(blockade_id)
+        path = self.find_way(blockade.get_position())
+        dx = abs(blockade.get_x() - x)
+        dy = abs(blockade.get_y() - y)
+
+        distance = math.hypot(dx, dy)
+        if distance < float(self.config.get_value('clear.repair.distance')):
+            if self.recent_blockade_repair_cost == blockade.get_repaire_cost():
+                self.broken_blockades.add(blockade)
+            else:
+                self.recent_blockade_repair_cost = blockade.get_repaire_cost()
+                self.send_clear(time_step, blockade.get_id())
+        else:
+            self.send_move(time_step, path)
+        return
+
+    def move_nearest_blockade_on_path(self, time_step, path):
         if isinstance(self.location(), Road):
-            target = self.get_nearest_blockade_on_path([self.location().get_id().get_value()])
+            target = self.get_nearest_blockade_on_path(path)
             if target:
                 self.send_clear(time_step, target)
         return
-
 
     def get_sorted_buildings(self):
         x = self.me().get_x()
@@ -170,13 +193,15 @@ class PoliceForceAgent(Agent):
         x = self.me().get_x()
         y = self.me().get_y()
 
-        blockades = [entity for entity in self.world_model.get_entities() if isinstance(entity, Blockade)]
+        blockades = [entity for entity in self.world_model.get_entities()
+                     if isinstance(entity, Blockade) and
+                     entity not in self.broken_blockades]
 
         for blockade in blockades:
             dx = abs(blockade.get_x() - x)
             dy = abs(blockade.get_y() - y)
             distance = math.hypot(dx, dy)
-            if distance < best_distance:
+            if distance < best_distance and blockade.get_repaire_cost() > 6:
                 best_distance = distance
                 best_blockade = blockade.get_id()
 

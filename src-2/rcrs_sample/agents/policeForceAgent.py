@@ -40,27 +40,21 @@ class PoliceForceAgent(Agent):
 
     def think(self, time_step, change_set, heard):
         if time_step == self.config.get_value(kernel_constants.IGNORE_AGENT_COMMANDS_KEY):
-            self.send_subscribe(time_step, [3])
+            self.send_subscribe(time_step, [1,2,3])
 
-        self.send_speak(time_step, f"police: {self.get_id().get_value()}", 3)
+        self.send_speak(time_step, f"police: {self.get_id().get_value()}", 2)
 
         buildings = self.get_sorted_buildings()
 
         if not buildings:
-            blockade = self.get_nearest_blockade()
-
-            if blockade:
-                self.move_nearest_blockade(time_step, blockade)
+            self.not_found_building_state(time_step)
             return
         if isinstance(self.location(), Building):
             self.visited_houses.add(self.location())
 
             buildings = buildings[1:]
             if not buildings:
-                blockade = self.get_nearest_blockade()
-
-                if blockade:
-                    self.move_nearest_blockade(time_step, blockade)
+                self.not_found_building_state(time_step)
                 return
             path = self.find_way(buildings[0].get_id())
             self.send_move(time_step, path)
@@ -68,6 +62,13 @@ class PoliceForceAgent(Agent):
             path = self.find_way(buildings[0].get_id())
             self.move_nearest_blockade_on_path(time_step, path)
             self.send_move(time_step, path)
+
+    def not_found_building_state(self, time_step):
+        blockade = self.get_nearest_blockade()
+
+        if blockade:
+            self.move_nearest_blockade(time_step, blockade)
+        return
 
     def move_nearest_blockade(self, time_step, blockade_id):
         x = self.me().get_x()
@@ -111,7 +112,7 @@ class PoliceForceAgent(Agent):
         neighs = self.get_neighbors(building)
         for neigh in neighs:
             blockades = neigh.get_blockades()
-            if blockades:
+            if blockades or blockades:
                 return True
         return False
 

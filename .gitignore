@@ -1,0 +1,6 @@
+./logs
+
+./.idea
+
+./src/agents/__pycache__
+./src-2/rcrs_sample/__pychache__

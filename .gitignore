@@ -3,4 +3,5 @@
 ./.idea
 
 ./src/agents/__pycache__
-./src-2/rcrs_sample/__pychache__
+./src-2/rcrs_sample/__pycache__
+./server/__pycache__

@@ -31,8 +31,6 @@ class AmbulanceTeamAgent(Agent):
 
         civilians = self.get_civilians()
 
-        print(heard)
-
         refugeees = self.get_refuges()
         if refugeees:
             self.refuge = refugeees[0]

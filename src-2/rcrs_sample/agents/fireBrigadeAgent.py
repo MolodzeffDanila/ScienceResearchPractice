@@ -7,7 +7,10 @@ from rcrs_core.connection import URN, RCRSProto_pb2
 from rcrs_core.constants import kernel_constants
 from rcrs_core.entities.building import Building
 from rcrs_core.worldmodel.entityID import EntityID
+
+from server.constants import SERVER_HOST
 from src.agents.node import Node
+import requests
 
 WATER_OUT = 1000
 
@@ -38,6 +41,12 @@ class FireBrigadeAgent(Agent):
         buildings = [entity for entity in entities if isinstance(entity, Building)]
         buildings = [build for build in buildings if build.fieryness.value > 0]
         buildings.sort(key=lambda b: abs(b.get_x() - x) + abs(b.get_y() - y))
+
+        for build in buildings:
+            requests.post(f'{SERVER_HOST}/burning', json = {
+                'id': build.get_id().get_value(),
+                'fireness': build.fieryness.value
+            })
 
         if buildings:
             path = self.find_way(buildings[0].get_id())

@@ -16,6 +16,7 @@ def hello_world():
 
 @api.route("/burning")
 class BurningResource(Resource):
+    @api.doc(description="Получить список всех горящих зданий")
     @api.marshal_list_with(burning_model)
     def get(self):
         session = SessionLocal()
@@ -25,7 +26,11 @@ class BurningResource(Resource):
         finally:
             session.close()
 
-    @api.expect([burning_model])
+    @api.doc(description="Добавить или обновить данные о горящих зданиях")
+    @api.expect([burning_model], validate=True)
+    @api.response(201, "Данные успешно добавлены")
+    @api.response(400, "Ошибка валидации")
+    @api.response(500, "Ошибка сервера")
     def post(self):
         session = SessionLocal()
         try:
@@ -52,6 +57,7 @@ class BurningResource(Resource):
 
 @api.route("/civilians")
 class CiviliansResource(Resource):
+    @api.doc(description="Получить список всех гражданских")
     @api.marshal_list_with(civilian_model)
     def get(self):
         session = SessionLocal()
@@ -60,7 +66,11 @@ class CiviliansResource(Resource):
         finally:
             session.close()
 
-    @api.expect([civilian_model])
+    @api.doc(description="Добавить или обновить данные о гражданских")
+    @api.expect([civilian_model], validate=True)
+    @api.response(201, "Данные успешно добавлены")
+    @api.response(400, "Ошибка валидации")
+    @api.response(500, "Ошибка сервера")
     def post(self):
         session = SessionLocal()
         try:
@@ -89,6 +99,7 @@ class CiviliansResource(Resource):
 
 @api.route("/visited")
 class VisitedResource(Resource):
+    @api.doc(description="Получить список посещённых зданий")
     @api.marshal_list_with(visited_model)
     def get(self):
         session = SessionLocal()
@@ -97,7 +108,10 @@ class VisitedResource(Resource):
         finally:
             session.close()
 
-    @api.expect(visited_model)
+    @api.doc(description="Добавить или обновить информацию о посещённом здании")
+    @api.expect(visited_model, validate=True)
+    @api.response(200, "Запись обновлена")
+    @api.response(500, "Ошибка базы данных")
     def post(self):
         data = request.get_json()
         session = SessionLocal()

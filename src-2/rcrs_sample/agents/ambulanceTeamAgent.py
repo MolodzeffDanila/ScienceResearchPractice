@@ -1,6 +1,7 @@
 import heapq
 
 import math
+import requests
 from rcrs_core.agents.agent import Agent
 from rcrs_core.connection import URN
 from rcrs_core.constants import kernel_constants
@@ -9,6 +10,8 @@ from rcrs_core.entities.human import Human
 from rcrs_core.entities.refuge import Refuge
 from rcrs_core.worldmodel.entityID import EntityID
 
+from server.constants import SERVER_HOST
+from shared.utils import civilians_to_json
 from src.agents.node import Node
 
 
@@ -31,6 +34,9 @@ class AmbulanceTeamAgent(Agent):
 
         civilians = self.get_civilians()
 
+        if civilians:
+            requests.post(f'{SERVER_HOST}/civilians',json=civilians_to_json(civilians))
+
         refugeees = self.get_refuges()
         if refugeees:
             self.refuge = refugeees[0]
@@ -38,22 +44,13 @@ class AmbulanceTeamAgent(Agent):
         if not civilians:
             return
 
-        #if self.loaded:
-        #    path = self.find_way(self.refuge.get_id())
-        #    self.send_move(time_step, path)
-
         if self.location().get_id().get_value() == civilians[0].get_position().get_value():
             self.loaded = True
-            self.send_load(time_step, civilians[0].get_id())
+            self.send_rescue(time_step, civilians[0].get_id())
         else:
             path = self.find_way(civilians[0].get_position())
             self.send_move(time_step, path)
-        # self.send_load(time_step, target)
-        # self.send_unload(time_step)
-        # self.send_say(time_step, 'HELP')
-        # self.send_speak(time_step, 'HELP meeeee police', 1)
-        # self.send_move(time_step, my_path)
-        # self.send_rest(time_step)
+
 
     def get_civilians(self):
         civilians = []

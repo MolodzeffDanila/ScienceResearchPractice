@@ -1,5 +1,5 @@
 ./logs
-
+./*idea
 ./.idea
 
 ./src/agents/__pycache__

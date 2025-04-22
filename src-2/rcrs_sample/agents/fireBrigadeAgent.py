@@ -7,7 +7,10 @@ from rcrs_core.connection import URN, RCRSProto_pb2
 from rcrs_core.constants import kernel_constants
 from rcrs_core.entities.building import Building
 from rcrs_core.worldmodel.entityID import EntityID
+
+from server.constants import SERVER_HOST
 from src.agents.node import Node
+import requests
 
 WATER_OUT = 1000
 
@@ -15,6 +18,7 @@ class FireBrigadeAgent(Agent):
     def __init__(self, pre):
         Agent.__init__(self, pre)
         self.name = "firebrigadeAgent"
+        self.water = 1000
     
     def precompute(self):
         self.Log.info('precompute finshed')
@@ -23,22 +27,43 @@ class FireBrigadeAgent(Agent):
         return [URN.Entity.FIRE_BRIGADE]
 
     def think(self, time_step, change_set, heard):
-        if time_step == self.config.get_value(kernel_constants.IGNORE_AGENT_COMMANDS_KEY):
-            self.send_subscribe(time_step, [3])
+        if time_step < int(self.config.get_value(kernel_constants.IGNORE_AGENT_COMMANDS_KEY)):
+            self.send_subscribe(time_step, [0,1,2,3])
+            self.send_rest(time_step)
+            return
+
+        self.water = self.world_model.get_entity(self.get_id()).get_water()
 
         x = self.me().get_x()
         y = self.me().get_y()
 
         entities = self.world_model.get_entities()
-        buildings = [entity for entity in entities if
-                     isinstance(entity, Building) and entity.fieryness.value > 0]
+        buildings = [entity for entity in entities if isinstance(entity, Building)]
+        buildings = [build for build in buildings if build.fieryness.value > 0]
         buildings.sort(key=lambda b: abs(b.get_x() - x) + abs(b.get_y() - y))
+
+        for build in buildings:
+            requests.post(f'{SERVER_HOST}/burning', json = {
+                'id': build.get_id().get_value(),
+                'fireness': build.fieryness.value
+            })
 
         if buildings:
             path = self.find_way(buildings[0].get_id())
-            neighs = [entity.get_id().get_value() for entity in self.get_neighbors(self.location())]
-            if buildings[0].get_id().get_value() in neighs:
-                self.send_extinguish(time_step, buildings[0].get_id(), buildings[0].get_x(), buildings[0].get_y(), self.me().get_water())
+
+            dx = buildings[0].get_x() - x
+            dy = buildings[0].get_y() - y
+
+            dist = math.hypot(dx, dy)
+
+            if dist < float(self.config.get_value('fire.extinguish.max-distance')):
+                #self.send_speak(time_step,f'Ext: {buildings[0].get_id().get_value()}',2)
+                self.send_extinguish(
+                    time_step,
+                    buildings[0].get_id(),
+                    buildings[0].get_x(),
+                    buildings[0].get_y(),
+                )
                 return
             self.send_move(time_step, path)
 
@@ -92,11 +117,9 @@ class FireBrigadeAgent(Agent):
                     neighbor.parent = current_node
                     heapq.heappush(open_list, neighbor)
 
-
     def get_neighbors(self, node):
         neighbors = [self.world_model.get_entity(neigh) for neigh in node.get_neighbours()]
         return list(filter(lambda x: x is not None, neighbors))
-
 
     def get_distance(self, node1, node2):
         dx = abs(self.world_model.get_entity(node1.get_id()).get_x() - self.world_model.get_entity(node2.get_id()).get_x())

@@ -14,7 +14,7 @@ from itertools import chain
 from rcrs_core.worldmodel.entityID import EntityID
 
 from src.agents.node import Node
-from src.agents.utils import from_id_list_to_entity_id, from_entity_id_to_id_list
+from shared.utils import from_id_list_to_entity_id, from_entity_id_to_id_list
 
 
 class PoliceForceAgent(Agent):

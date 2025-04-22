@@ -1,16 +1,22 @@
+import requests
 from rcrs_core.agents.agent import Agent
 from rcrs_core.constants import kernel_constants
 from rcrs_core.connection import URN
 from rcrs_core.entities.blockade import Blockade
 from rcrs_core.entities.building import Building
+from rcrs_core.entities.human import Human
 from rcrs_core.entities.road import Road
 import sys
 import heapq
 import math
 from itertools import chain
 
-from src.agents.node import Node
-from src.agents.utils import from_id_list_to_entity_id
+from rcrs_core.worldmodel.entityID import EntityID
+
+from server.constants import SERVER_HOST
+from shared.node import Node
+from shared.reqs import get_civilians_from_server
+from shared.utils import from_id_list_to_entity_id, civilians_to_json, burning_to_json, get_distance
 
 
 class PoliceForceAgent(Agent):
@@ -27,9 +33,6 @@ class PoliceForceAgent(Agent):
     def get_requested_entities(self):
         return [URN.Entity.POLICE_FORCE]
 
-    def get_distance(self, point1, point2):
-        return math.hypot(point1.get_x() - point2.get_x(), point1.get_y() - point2.get_y())
-
     def get_blockades(self):
         blockades = [entity for entity in self.world_model.get_entities() if isinstance(entity, Blockade)]
         return blockades
@@ -40,27 +43,39 @@ class PoliceForceAgent(Agent):
 
     def think(self, time_step, change_set, heard):
         if time_step == self.config.get_value(kernel_constants.IGNORE_AGENT_COMMANDS_KEY):
-            self.send_subscribe(time_step, [3])
-
-        self.send_speak(time_step, f"police: {self.get_id().get_value()}", 3)
+            self.send_subscribe(time_step, [1,2,3])
 
         buildings = self.get_sorted_buildings()
+        civilians_view = self.get_civilians()
+        burning = self.get_burning_buildings()
+
+        if burning:
+            requests.post(f'{SERVER_HOST}/burning', json=burning_to_json(burning))
+
+        if civilians_view:
+            requests.post(f'{SERVER_HOST}/civilians', json=civilians_to_json(civilians_view))
+
+        #Стейт со спасением людей
+        """civilians = civilians_to_json(civilians_view) + get_civilians_from_server().json()
+
+        if civilians:
+            civ_id = EntityID(civilians[0]['position'])
+            if isinstance(self.location(), Building):
+                self.send_clear(time_step, civ_id)
+            else:
+                path = self.find_way(civ_id)
+                self.move_nearest_blockade_on_path(time_step, path)
+                self.send_move(time_step, path)"""
 
         if not buildings:
-            blockade = self.get_nearest_blockade()
-
-            if blockade:
-                self.move_nearest_blockade(time_step, blockade)
+            self.not_found_building_state(time_step)
             return
         if isinstance(self.location(), Building):
             self.visited_houses.add(self.location())
 
             buildings = buildings[1:]
             if not buildings:
-                blockade = self.get_nearest_blockade()
-
-                if blockade:
-                    self.move_nearest_blockade(time_step, blockade)
+                self.not_found_building_state(time_step)
                 return
             path = self.find_way(buildings[0].get_id())
             self.send_move(time_step, path)
@@ -68,6 +83,28 @@ class PoliceForceAgent(Agent):
             path = self.find_way(buildings[0].get_id())
             self.move_nearest_blockade_on_path(time_step, path)
             self.send_move(time_step, path)
+
+    def get_civilians(self):
+        civilians = []
+        for entity in self.world_model.get_entities():
+            if (isinstance(entity, Human)
+                    and entity.get_urn() == URN.Entity.CIVILIAN
+                    and entity.get_buriedness() > 0
+            ):
+                civilians.append(entity)
+        return civilians
+
+    def get_burning_buildings(self):
+        entities = self.world_model.get_entities()
+        buildings = [entity for entity in entities if isinstance(entity, Building) and entity.fieryness.value > 0]
+        return buildings
+
+    def not_found_building_state(self, time_step):
+        blockade = self.get_nearest_blockade()
+
+        if blockade:
+            self.move_nearest_blockade(time_step, blockade)
+        return
 
     def move_nearest_blockade(self, time_step, blockade_id):
         x = self.me().get_x()
@@ -111,7 +148,7 @@ class PoliceForceAgent(Agent):
         neighs = self.get_neighbors(building)
         for neigh in neighs:
             blockades = neigh.get_blockades()
-            if blockades:
+            if blockades or blockades:
                 return True
         return False
 
@@ -150,7 +187,7 @@ class PoliceForceAgent(Agent):
                 if neighbor.get_id() in closed_set:
                     continue
 
-                new_g = current_node.g + self.get_distance(current_node, neighbor)
+                new_g = current_node.g + get_distance(current_node, neighbor)
                 if nfo := next((n for n in open_list if n.get_id() == neighbor.get_id()), None):
                     if new_g < nfo.g:
                         nfo.g = new_g

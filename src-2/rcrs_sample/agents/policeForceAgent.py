@@ -1,4 +1,9 @@
 import requests
+import sys
+import heapq
+import math
+from itertools import chain
+
 from rcrs_core.agents.agent import Agent
 from rcrs_core.constants import kernel_constants
 from rcrs_core.connection import URN
@@ -6,18 +11,12 @@ from rcrs_core.entities.blockade import Blockade
 from rcrs_core.entities.building import Building
 from rcrs_core.entities.human import Human
 from rcrs_core.entities.road import Road
-import sys
-import heapq
-import math
-from itertools import chain
-
 from rcrs_core.worldmodel.entityID import EntityID
 
 from server.constants import SERVER_HOST
 from shared.node import Node
 from shared.reqs import get_civilians_from_server
 from shared.utils import from_id_list_to_entity_id, civilians_to_json, burning_to_json, get_distance
-
 
 class PoliceForceAgent(Agent):
     def __init__(self, pre):
@@ -26,53 +25,47 @@ class PoliceForceAgent(Agent):
         self.visited_houses = set()
         self.broken_blockades = set()
         self.recent_blockade_repair_cost = -1
+        self.civilians = []
 
     def precompute(self):
-        self.Log.info('precompute finshed')
+        self.Log.info('precompute finished')
 
     def get_requested_entities(self):
         return [URN.Entity.POLICE_FORCE]
-
-    def get_blockades(self):
-        blockades = [entity for entity in self.world_model.get_entities() if isinstance(entity, Blockade)]
-        return blockades
-
-    def get_neighbors(self, node):
-        neighbors = [self.world_model.get_entity(neigh) for neigh in node.get_neighbours()]
-        return list(filter(lambda x: x is not None, neighbors))
 
     def think(self, time_step, change_set, heard):
         if time_step == self.config.get_value(kernel_constants.IGNORE_AGENT_COMMANDS_KEY):
             self.send_subscribe(time_step, [1,2,3])
 
         buildings = self.get_sorted_buildings()
-        civilians_view = self.get_civilians()
         burning = self.get_burning_buildings()
 
         if burning:
             requests.post(f'{SERVER_HOST}/burning', json=burning_to_json(burning))
 
+        civilians_view = self.get_civilians()
+
         if civilians_view:
             requests.post(f'{SERVER_HOST}/civilians', json=civilians_to_json(civilians_view))
+        '''
+        self.civilians = civilians_to_json(civilians_view) + get_civilians_from_server().json()
 
-        #Стейт со спасением людей
-        """civilians = civilians_to_json(civilians_view) + get_civilians_from_server().json()
-
-        if civilians:
-            civ_id = EntityID(civilians[0]['position'])
+        if self.civilians:
+            civ_id = EntityID(self.civilians[0]['position'])
             if isinstance(self.location(), Building):
-                self.send_clear(time_step, civ_id)
+                self.send_clear(time_step, EntityID(self.civilians[0]['id']))
             else:
                 path = self.find_way(civ_id)
                 self.move_nearest_blockade_on_path(time_step, path)
-                self.send_move(time_step, path)"""
+                self.send_move(time_step, path)
+            return'''
 
         if not buildings:
             self.not_found_building_state(time_step)
             return
+
         if isinstance(self.location(), Building):
             self.visited_houses.add(self.location())
-
             buildings = buildings[1:]
             if not buildings:
                 self.not_found_building_state(time_step)
@@ -85,37 +78,24 @@ class PoliceForceAgent(Agent):
             self.send_move(time_step, path)
 
     def get_civilians(self):
-        civilians = []
-        for entity in self.world_model.get_entities():
-            if (isinstance(entity, Human)
-                    and entity.get_urn() == URN.Entity.CIVILIAN
-                    and entity.get_buriedness() > 0
-            ):
-                civilians.append(entity)
-        return civilians
+        return [e for e in self.world_model.get_entities() if isinstance(e, Human)
+                and e.get_urn() == URN.Entity.CIVILIAN and e.get_buriedness() > 0]
 
     def get_burning_buildings(self):
-        entities = self.world_model.get_entities()
-        buildings = [entity for entity in entities if isinstance(entity, Building) and entity.fieryness.value > 0]
-        return buildings
+        return [e for e in self.world_model.get_entities() if isinstance(e, Building) and e.fieryness.value > 0]
 
     def not_found_building_state(self, time_step):
-        blockade = self.get_nearest_blockade()
-
-        if blockade:
-            self.move_nearest_blockade(time_step, blockade)
-        return
+        blockade_id = self.get_best_blockade()
+        if blockade_id:
+            self.move_nearest_blockade(time_step, blockade_id)
 
     def move_nearest_blockade(self, time_step, blockade_id):
-        x = self.me().get_x()
-        y = self.me().get_y()
-
+        x, y = self.me().get_x(), self.me().get_y()
         blockade = self.world_model.get_entity(blockade_id)
         path = self.find_way(blockade.get_position())
-        dx = abs(blockade.get_x() - x)
-        dy = abs(blockade.get_y() - y)
-
+        dx, dy = abs(blockade.get_x() - x), abs(blockade.get_y() - y)
         distance = math.hypot(dx, dy)
+
         if distance < float(self.config.get_value('clear.repair.distance')):
             if self.recent_blockade_repair_cost == blockade.get_repaire_cost():
                 self.broken_blockades.add(blockade)
@@ -124,123 +104,104 @@ class PoliceForceAgent(Agent):
                 self.send_clear(time_step, blockade.get_id())
         else:
             self.send_move(time_step, path)
-        return
 
     def move_nearest_blockade_on_path(self, time_step, path):
         if isinstance(self.location(), Road):
             target = self.get_nearest_blockade_on_path(path)
             if target:
+                agent_id = self.me().get_id().get_value()
+                requests.post(f'{SERVER_HOST}/blockades', json={"id": target.get_value(), "agent": agent_id})
                 self.send_clear(time_step, target)
-        return
 
     def get_sorted_buildings(self):
-        x = self.me().get_x()
-        y = self.me().get_y()
-
-        entities = self.world_model.get_entities()
-        buildings = [entity for entity in entities if
-                     isinstance(entity, Building) and entity not in self.visited_houses
-                     and self.is_build_has_blockaded_roads(entity)]
+        x, y = self.me().get_x(), self.me().get_y()
+        buildings = [e for e in self.world_model.get_entities() if isinstance(e, Building) and e not in self.visited_houses and self.is_build_has_blockaded_roads(e)]
         buildings.sort(key=lambda b: abs(b.get_x() - x) + abs(b.get_y() - y))
         return buildings
 
     def is_build_has_blockaded_roads(self, building):
-        neighs = self.get_neighbors(building)
-        for neigh in neighs:
-            blockades = neigh.get_blockades()
-            if blockades or blockades:
-                return True
-        return False
+        return any(neigh.get_blockades() for neigh in self.get_neighbors(building))
+
+    def get_neighbors(self, node):
+        return [self.world_model.get_entity(neigh) for neigh in node.get_neighbours() if self.world_model.get_entity(neigh)]
 
     def find_way(self, entity_id):
-        target = self.world_model.get_entity(entity_id)
-        start_node = self.location()
-
-        path = self._a_star(start_node, target)
-        return path
-
-    def _a_star(self, start_node, target_node):
-        open_list = []
-
-        start_node = Node(start_node)
-        target_node = Node(target_node)
-
-        heapq.heappush(open_list, start_node)
-
+        start = Node(self.location())
+        target = Node(self.world_model.get_entity(entity_id))
+        open_list = [start]
         closed_set = set()
 
         while open_list:
-            current_node = heapq.heappop(open_list)
-
-            if current_node.id == target_node.id:
+            current = heapq.heappop(open_list)
+            if current.id == target.id:
                 path = []
-                while current_node is not None:
-                    path.append(current_node.id.get_value())
-                    current_node = current_node.parent
+                while current:
+                    path.append(current.id.get_value())
+                    current = current.parent
                 return path[::-1]
+            closed_set.add(current.id)
 
-            closed_set.add(current_node.id)
-
-            neighbors = [Node(neigh) for neigh in self.get_neighbors(current_node.entity)]
-
-            for neighbor in neighbors:
+            for neighbor in [Node(n) for n in self.get_neighbors(current.entity)]:
                 if neighbor.get_id() in closed_set:
                     continue
-
-                new_g = current_node.g + get_distance(current_node, neighbor)
+                new_g = current.g + get_distance(current, neighbor)
                 if nfo := next((n for n in open_list if n.get_id() == neighbor.get_id()), None):
                     if new_g < nfo.g:
                         nfo.g = new_g
-                        nfo.h = math.sqrt((target_node.get_x() - nfo.get_x()) ** 2 + (target_node.get_y() - nfo.get_y()) ** 2)
+                        nfo.h = get_distance(nfo, target)
                         nfo.f = nfo.g + nfo.h
-                        nfo.parent = current_node
+                        nfo.parent = current
                         heapq.heapify(open_list)
                 else:
                     neighbor.g = new_g
-                    neighbor.h = math.sqrt((target_node.get_x() - neighbor.get_x()) ** 2 + (target_node.get_y() - neighbor.get_y()) ** 2)
+                    neighbor.h = get_distance(neighbor, target)
                     neighbor.f = neighbor.g + neighbor.h
-                    neighbor.parent = current_node
+                    neighbor.parent = current
                     heapq.heappush(open_list, neighbor)
 
     def get_nearest_blockade_on_path(self, path):
-        best_distance = sys.maxsize
         best = None
         x = self.me().get_x()
         y = self.me().get_y()
 
         blockades = self.location().get_blockades()
         path = [self.world_model.get_entity(p) for p in from_id_list_to_entity_id(path)]
-        path_blockades = list(chain.from_iterable(p.get_blockades() for p in path))
+        path_blockades = list(chain.from_iterable(p.get_blockades() for p in path if p))
 
         all_blockades = blockades + path_blockades
+
+        candidates = []
         for b in all_blockades:
             blockade = self.world_model.get_entity(b)
             if blockade:
-                dx = abs(blockade.get_x() - x)
-                dy = abs(blockade.get_y() - y)
+                dx = blockade.get_x() - x
+                dy = blockade.get_y() - y
                 distance = math.hypot(dx, dy)
-                if distance < best_distance and distance < float(self.config.get_value('clear.repair.distance')):
-                    best_distance = distance
-                    best = blockade.get_id()
+                if distance < float(self.config.get_value('clear.repair.distance')):
+                    candidates.append((distance, blockade.get_id()))
+
+        if candidates:
+            candidates.sort(key=lambda t: t[0])  # Сортировка только по расстоянию
+            best = candidates[0][1]
+
         return best
 
-    def get_nearest_blockade(self):
-        best_distance = sys.maxsize
-        best_blockade = None
-        x = self.me().get_x()
-        y = self.me().get_y()
+    def get_best_blockade(self):
+        blockades = [b for b in self.world_model.get_entities() if isinstance(b, Blockade) and b not in self.broken_blockades]
+        assignments = requests.get(f'{SERVER_HOST}/blockades').json()
+        unassigned = [b for b in blockades if str(b.get_id()) not in assignments]
+        scored = sorted(unassigned, key=lambda b: -self.score_blockade(b))
+        return scored[0].get_id() if scored else None
 
-        blockades = [entity for entity in self.world_model.get_entities()
-                     if isinstance(entity, Blockade) and
-                     entity not in self.broken_blockades]
+    def score_blockade(self, blockade):
+        position_entity = self.world_model.get_entity(blockade.get_position())
+        neighbors = self.get_neighbors(position_entity)
 
-        for blockade in blockades:
-            dx = abs(blockade.get_x() - x)
-            dy = abs(blockade.get_y() - y)
-            distance = math.hypot(dx, dy)
-            if distance < best_distance and blockade.get_repaire_cost() > 6:
-                best_distance = distance
-                best_blockade = blockade.get_id()
+        score = len(neighbors)
+        humans = self.civilians
 
-        return best_blockade
+        for road in neighbors:
+            if any(h.get_position() == road.get_id() and h.get_buriedness() > 0 for h in humans):
+                score += 3
 
+        return score

@@ -9,6 +9,8 @@ from rcrs_core.entities.building import Building
 from rcrs_core.worldmodel.entityID import EntityID
 
 from server.constants import SERVER_HOST
+from shared.reqs import get_burning_from_server
+from shared.utils import burning_to_json
 from src.agents.node import Node
 import requests
 
@@ -40,13 +42,19 @@ class FireBrigadeAgent(Agent):
         entities = self.world_model.get_entities()
         buildings = [entity for entity in entities if isinstance(entity, Building)]
         buildings = [build for build in buildings if build.fieryness.value > 0]
-        buildings.sort(key=lambda b: abs(b.get_x() - x) + abs(b.get_y() - y))
 
-        for build in buildings:
-            requests.post(f'{SERVER_HOST}/burning', json = {
-                'id': build.get_id().get_value(),
-                'fireness': build.fieryness.value
-            })
+
+        if buildings:
+            aa = get_burning_from_server()
+            print(aa)
+            print(aa.json())
+            burning = aa.json() + burning_to_json(buildings)
+            burning.sort(key=lambda b: abs(b['x'] - x) + abs(b['y'] - y))
+
+            print(burning)
+
+        if buildings:
+            requests.post(f'{SERVER_HOST}/burning', json=burning_to_json(buildings))
 
         if buildings:
             path = self.find_way(buildings[0].get_id())

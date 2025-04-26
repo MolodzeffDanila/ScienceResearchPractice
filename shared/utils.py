@@ -25,4 +25,6 @@ def burning_to_json(burning: list[Building]):
     return list(map(lambda civ: {
         "id": civ.get_id().get_value(),
         "fireness": civ.get_fieryness(),
+        'x': civ.get_x(),
+        'y': civ.get_y()
     }, burning))

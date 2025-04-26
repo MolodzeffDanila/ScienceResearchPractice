@@ -9,3 +9,5 @@ class CivilianInput(BaseModel):
 class BurningInput(BaseModel):
     id: int
     fireness: int
+    x: int
+    y: int

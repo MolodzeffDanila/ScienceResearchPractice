@@ -25,4 +25,19 @@ def burning_to_json(burning: list[Building]):
     return list(map(lambda civ: {
         "id": civ.get_id().get_value(),
         "fireness": civ.get_fieryness(),
+        'x': civ.get_x(),
+        'y': civ.get_y()
     }, burning))
+
+def building_priority(building, my_x, my_y):
+    distance = abs(building['x'] - my_x) + abs(building['y'] - my_y)
+    if building['fireness'] == 1:
+        danger = 0
+    elif building['fireness'] == 2:
+        danger = 1
+    elif building['fireness'] == 3:
+        danger = 2
+    else:
+        danger = 3
+
+    return (danger, distance)

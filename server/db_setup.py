@@ -1,6 +1,5 @@
 import os
 
-from flask_sqlalchemy.session import Session
 from sqlalchemy import Column, Integer
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, scoped_session, sessionmaker
@@ -20,12 +19,20 @@ class Burning(Base):
 
     id = Column(Integer, primary_key=True)
     fireness = Column(Integer)
+    x = Column(Integer)
+    y = Column(Integer)
 
 class Visited(Base):
     __tablename__ = 'visited'
 
     id = Column(Integer, primary_key=True)
     position = Column(Integer)
+
+class Blockade(Base):
+    __tablename__ = 'blockade'
+
+    id = Column(Integer, primary_key=True)
+    agent = Column(Integer)
 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 db_path = os.path.join(BASE_DIR, 'database.db')
@@ -36,7 +43,7 @@ SessionLocal = scoped_session(sessionmaker(bind=engine))
 def clear_all_data():
     session = SessionLocal()
     try:
-        for model in [Civilians, Burning, Visited]:  # добавь сюда все модели, которые хочешь очищать
+        for model in [Civilians, Burning, Visited, Blockade]:  # добавь сюда все модели, которые хочешь очищать
             session.query(model).delete()
         session.commit()
         print("[✔] Все таблицы очищены.")

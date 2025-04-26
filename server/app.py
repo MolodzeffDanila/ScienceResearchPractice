@@ -1,12 +1,12 @@
-from flask import Flask, request, jsonify
+from flask import request, jsonify
 from flask_restx import Resource
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
-from db_setup import Burning, Civilians, SessionLocal, clear_all_data
-from server.db_setup import Visited
+from db_setup import Burning, Civilians, SessionLocal, clear_all_data, Base, engine
+from server.db_setup import Visited, Blockade
 from server.dto import CivilianInput, BurningInput
-from server.swagger import burning_model, api, civilian_model, visited_model, app
+from server.swagger import burning_model, api, civilian_model, visited_model, app, blockade_assignment_model
 
 
 @app.route("/")
@@ -41,16 +41,18 @@ class BurningResource(Resource):
                 new_burning = Burning(
                     id=burn.id,
                     fireness=burn.fireness,
+                    x=burn.x,
+                    y=burn.y
                 )
                 session.merge(new_burning)
             session.commit()
-            return jsonify({"status": "success"}), 201
+            return {"status": "success"}, 201
 
         except ValidationError as e:
-            return jsonify({"error": e.errors()}), 400
+            return {"error": e.errors()}, 400
         except Exception as e:
             session.rollback()
-            return jsonify({"error": str(e)}), 500
+            return {"error": str(e)}, 500
         finally:
             session.close()
 
@@ -86,13 +88,16 @@ class CiviliansResource(Resource):
                 )
                 session.merge(civilian)
             session.commit()
-            return jsonify({"status": "success"}), 201
+
+            return {"status": "merged"}, 201
 
         except ValidationError as e:
-            return jsonify({"error": e.errors()}), 400
+            return {"error": e.errors()}, 400
+
         except Exception as e:
             session.rollback()
-            return jsonify({"error": str(e)}), 500
+            return {"error": str(e)}, 500
+
         finally:
             session.close()
 
@@ -130,6 +135,43 @@ class VisitedResource(Resource):
         finally:
             session.close()
 
+@api.route("/blockades")
+class BlockadeResource(Resource):
+    @api.expect(blockade_assignment_model)
+    @api.response(200, "Запись обновлена")
+    @api.response(500, "Ошибка базы данных")
+    def post(self):
+        data = request.get_json()
+        session = SessionLocal()
+
+        try:
+            assignment = Blockade(
+                agent=data["agent"],
+                id=data["id"],
+            )
+            session.merge(assignment)
+            session.commit()
+            return jsonify({'status': 'merged'})
+
+        except SQLAlchemyError as e:
+            session.rollback()
+            return jsonify({'error': str(e)}), 500
+        finally:
+            session.close()
+
+    @api.doc(description="Получить список взятых в работу завалов")
+    @api.marshal_list_with(blockade_assignment_model)
+    def get(self):
+        session = SessionLocal()
+        assignments = session.query(Blockade).all()
+        result = [{
+            "agent": a.agent,
+            "id": a.id,
+        } for a in assignments]
+        session.close()
+        return result, 200
+
+
 
 def run_app():
     app.run(
@@ -141,5 +183,6 @@ def run_app():
 
 
 if __name__ == "__main__":
+    Base.metadata.create_all(bind=engine)
     clear_all_data()
     run_app()

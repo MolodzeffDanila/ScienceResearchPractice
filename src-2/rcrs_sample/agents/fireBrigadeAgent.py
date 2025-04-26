@@ -1,4 +1,5 @@
 import heapq
+from itertools import chain
 
 import math
 from rcrs_core.agents.agent import Agent
@@ -6,9 +7,13 @@ from rcrs_core.commands.Command import Command
 from rcrs_core.connection import URN, RCRSProto_pb2
 from rcrs_core.constants import kernel_constants
 from rcrs_core.entities.building import Building
+from rcrs_core.entities.refuge import Refuge
+from rcrs_core.entities.road import Road
 from rcrs_core.worldmodel.entityID import EntityID
 
 from server.constants import SERVER_HOST
+from shared.reqs import get_burning_from_server
+from shared.utils import burning_to_json, building_priority, from_id_list_to_entity_id
 from src.agents.node import Node
 import requests
 
@@ -19,6 +24,8 @@ class FireBrigadeAgent(Agent):
         Agent.__init__(self, pre)
         self.name = "firebrigadeAgent"
         self.water = 1000
+        self.going_to_refuge = False
+        self.broken_blockades = []
     
     def precompute(self):
         self.Log.info('precompute finshed')
@@ -28,43 +35,69 @@ class FireBrigadeAgent(Agent):
 
     def think(self, time_step, change_set, heard):
         if time_step < int(self.config.get_value(kernel_constants.IGNORE_AGENT_COMMANDS_KEY)):
-            self.send_subscribe(time_step, [0,1,2,3])
+            self.send_subscribe(time_step, [0, 1, 2, 3])
             self.send_rest(time_step)
             return
 
         self.water = self.world_model.get_entity(self.get_id()).get_water()
 
-        x = self.me().get_x()
-        y = self.me().get_y()
+        if self.going_to_refuge:
+            if self.water >= 1000:  # допустим, полная заправка
+                self.going_to_refuge = False  # заправился, снова тушим
+            else:
+                refuges = self.get_refuges()
+                if refuges:
+                    refuge = refuges[0]
+                    path = self.find_way(refuge.get_id())
+                    self.send_move(time_step, path)
+                else:
+                    self.send_rest(time_step)
+                return
+
+        if self.water == 0:
+            self.going_to_refuge = True
+            refuges = self.get_refuges()
+            if refuges:
+                refuge = refuges[0]
+                path = self.find_way(refuge.get_id())
+                self.move_nearest_blockade_on_path(time_step, path)
+                self.send_move(time_step, path)
+            else:
+                self.send_rest(time_step)
+            return
+
+        x, y = self.me().get_x(), self.me().get_y()
 
         entities = self.world_model.get_entities()
         buildings = [entity for entity in entities if isinstance(entity, Building)]
         buildings = [build for build in buildings if build.fieryness.value > 0]
-        buildings.sort(key=lambda b: abs(b.get_x() - x) + abs(b.get_y() - y))
-
-        for build in buildings:
-            requests.post(f'{SERVER_HOST}/burning', json = {
-                'id': build.get_id().get_value(),
-                'fireness': build.fieryness.value
-            })
 
         if buildings:
-            path = self.find_way(buildings[0].get_id())
+            requests.post(f'{SERVER_HOST}/burning', json=burning_to_json(buildings))
 
-            dx = buildings[0].get_x() - x
-            dy = buildings[0].get_y() - y
+        burning = get_burning_from_server().json() + burning_to_json(buildings)
+        burning = [b for b in burning if b['fireness'] <= 3]
+        burning.sort(key=lambda b: building_priority(b, x, y))
 
+        if burning:
+            target_building = self.world_model.get_entity(EntityID(burning[0]['id']))
+            path = self.find_way(target_building.get_id())
+
+            dx = target_building.get_x() - x
+            dy = target_building.get_y() - y
             dist = math.hypot(dx, dy)
 
             if dist < float(self.config.get_value('fire.extinguish.max-distance')):
-                #self.send_speak(time_step,f'Ext: {buildings[0].get_id().get_value()}',2)
+                water_to_use = min(self.water, WATER_OUT)
                 self.send_extinguish(
                     time_step,
-                    buildings[0].get_id(),
-                    buildings[0].get_x(),
-                    buildings[0].get_y(),
+                    target_building.get_id(),
+                    target_building.get_x(),
+                    target_building.get_y(),
+                    water=water_to_use
                 )
                 return
+            self.move_nearest_blockade_on_path(time_step, path)
             self.send_move(time_step, path)
 
     def find_way(self, entity_id):
@@ -126,6 +159,47 @@ class FireBrigadeAgent(Agent):
         dy = abs(self.world_model.get_entity(node1.get_id()).get_y() - self.world_model.get_entity(node2.get_id()).get_y())
         return dx + dy
 
+    def get_refuges(self):
+        refuges = []
+        for entity in self.world_model.get_entities():
+            if isinstance(entity, Refuge):
+                refuges.append(entity)
+        x, y = self.me().get_x(), self.me().get_y()
+        refuges.sort(key=lambda r: abs(r.get_x() - x) + abs(r.get_y() - y))
+        return refuges
+
+    def move_nearest_blockade_on_path(self, time_step, path):
+        if isinstance(self.location(), Road):
+            target = self.get_nearest_blockade_on_path(path)
+            if target:
+                self.send_clear(time_step, target)
+
+    def get_nearest_blockade_on_path(self, path):
+        best = None
+        x = self.me().get_x()
+        y = self.me().get_y()
+
+        blockades = self.location().get_blockades()
+        path = [self.world_model.get_entity(p) for p in from_id_list_to_entity_id(path)]
+        path_blockades = list(chain.from_iterable(p.get_blockades() for p in path if p))
+
+        all_blockades = blockades + path_blockades
+
+        candidates = []
+        for b in all_blockades:
+            blockade = self.world_model.get_entity(b)
+            if blockade:
+                dx = blockade.get_x() - x
+                dy = blockade.get_y() - y
+                distance = math.hypot(dx, dy)
+                if distance < float(self.config.get_value('clear.repair.distance')):
+                    candidates.append((distance, blockade.get_id()))
+
+        if candidates:
+            candidates.sort(key=lambda t: t[0])  # Сортировка только по расстоянию
+            best = candidates[0][1]
+
+        return best
 
     def send_extinguish(self, time_step: int, target: EntityID, target_x: int, target_y: int, water: int = WATER_OUT):
         cmd = AKExtinguish(self.get_id(), time_step, target, target_x, target_y, water)

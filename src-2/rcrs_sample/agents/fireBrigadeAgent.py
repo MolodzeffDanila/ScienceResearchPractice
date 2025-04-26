@@ -44,14 +44,8 @@ class FireBrigadeAgent(Agent):
         buildings = [build for build in buildings if build.fieryness.value > 0]
 
 
-        if buildings:
-            aa = get_burning_from_server()
-            print(aa)
-            print(aa.json())
-            burning = aa.json() + burning_to_json(buildings)
-            burning.sort(key=lambda b: abs(b['x'] - x) + abs(b['y'] - y))
-
-            print(burning)
+        burning = get_burning_from_server().json() + burning_to_json(buildings)
+        burning.sort(key=lambda b: abs(b['x'] - x) + abs(b['y'] - y))
 
         if buildings:
             requests.post(f'{SERVER_HOST}/burning', json=burning_to_json(buildings))
@@ -65,7 +59,6 @@ class FireBrigadeAgent(Agent):
             dist = math.hypot(dx, dy)
 
             if dist < float(self.config.get_value('fire.extinguish.max-distance')):
-                #self.send_speak(time_step,f'Ext: {buildings[0].get_id().get_value()}',2)
                 self.send_extinguish(
                     time_step,
                     buildings[0].get_id(),

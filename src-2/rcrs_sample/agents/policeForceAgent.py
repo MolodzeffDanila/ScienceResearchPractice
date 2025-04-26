@@ -85,7 +85,7 @@ class PoliceForceAgent(Agent):
         return [e for e in self.world_model.get_entities() if isinstance(e, Building) and e.fieryness.value > 0]
 
     def not_found_building_state(self, time_step):
-        blockade_id = self.get_best_blockade()
+        blockade_id = self.get_nearest_blockade()
         if blockade_id:
             self.move_nearest_blockade(time_step, blockade_id)
 
@@ -191,7 +191,7 @@ class PoliceForceAgent(Agent):
         assignments = requests.get(f'{SERVER_HOST}/blockades').json()
         unassigned = [b for b in blockades if str(b.get_id()) not in assignments]
         scored = sorted(unassigned, key=lambda b: -self.score_blockade(b))
-        return scored[0].get_id() if scored else None
+        return scored[0].get_id() if scored else self.get_nearest_blockade()
 
     def score_blockade(self, blockade):
         position_entity = self.world_model.get_entity(blockade.get_position())
@@ -205,3 +205,23 @@ class PoliceForceAgent(Agent):
                 score += 3
 
         return score
+
+    def get_nearest_blockade(self):
+        best_distance = sys.maxsize
+        best_blockade = None
+        x = self.me().get_x()
+        y = self.me().get_y()
+
+        blockades = [entity for entity in self.world_model.get_entities()
+                     if isinstance(entity, Blockade) and
+                     entity not in self.broken_blockades]
+
+        for blockade in blockades:
+            dx = abs(blockade.get_x() - x)
+            dy = abs(blockade.get_y() - y)
+            distance = math.hypot(dx, dy)
+            if distance < best_distance and blockade.get_repaire_cost() > 6:
+                best_distance = distance
+                best_blockade = blockade.get_id()
+
+        return best_blockade

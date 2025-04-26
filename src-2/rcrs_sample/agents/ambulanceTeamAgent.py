@@ -95,7 +95,6 @@ class AmbulanceTeamAgent(Agent):
         for entity in self.world_model.get_entities():
             if isinstance(entity, Refuge):
                 refuges.append(entity)
-        # Сортировка по расстоянию
         x, y = self.me().get_x(), self.me().get_y()
         refuges.sort(key=lambda r: abs(r.get_x() - x) + abs(r.get_y() - y))
         return refuges

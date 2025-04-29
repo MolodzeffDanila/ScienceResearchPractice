@@ -15,6 +15,7 @@ from rcrs_core.worldmodel.entityID import EntityID
 
 from server.constants import SERVER_HOST
 from shared.node import Node
+from shared.reqs import get_civilians_from_server, delete_civilian
 from shared.utils import from_id_list_to_entity_id, civilians_to_json, burning_to_json, get_distance
 
 class PoliceForceAgent(Agent):
@@ -40,13 +41,8 @@ class PoliceForceAgent(Agent):
         burning = self.get_burning_buildings()
 
         blockades_to_not_touch_json = requests.get(f'{SERVER_HOST}/blockades').json()
-        blockades_to_not_touch = set()
         for b in blockades_to_not_touch_json:
-            blockades_to_not_touch.add(EntityID(b['id']))
-        self.blockades.union(blockades_to_not_touch)
-
-        if(self.get_id().get_value() == 410064826):
-            print(self.blockades)
+            self.blockades.add(EntityID(b['id']))
 
         if burning:
             requests.post(f'{SERVER_HOST}/burning', json=burning_to_json(burning))
@@ -55,6 +51,20 @@ class PoliceForceAgent(Agent):
 
         if civilians_view:
             requests.post(f'{SERVER_HOST}/civilians', json=civilians_to_json(civilians_view))
+
+        x, y = self.me().get_x(), self.me().get_y()
+
+        civilians = [civ for civ in get_civilians_from_server() if (civ['x'] - x) ** 2 + (civ['y'] - y) ** 2 < 30000]
+
+        civilians.sort(key=lambda civ: (civ['x'] - x) ** 2 + (civ['y'] - y) ** 2)
+
+        if civilians:
+            if isinstance(self.location(), Building):
+                delete_civilian(civilians[0]['id'])
+            cur_civ_pos = EntityID(civilians[0]['position'])
+            path = self.find_way(cur_civ_pos)
+            self.move_nearest_blockade_on_path(time_step, path)
+            self.send_move(time_step, path)
 
         if not buildings:
             self.not_found_building_state(time_step)
@@ -75,7 +85,8 @@ class PoliceForceAgent(Agent):
 
     def get_civilians(self):
         return [e for e in self.world_model.get_entities() if isinstance(e, Human)
-                and e.get_urn() == URN.Entity.CIVILIAN and e.get_buriedness() > 0]
+                and e.get_urn() == URN.Entity.CIVILIAN
+                and isinstance( self.world_model.get_entity(e.get_position()), Building)]
 
     def get_burning_buildings(self):
         return [e for e in self.world_model.get_entities() if isinstance(e, Building) and e.fieryness.value > 0]
@@ -85,7 +96,8 @@ class PoliceForceAgent(Agent):
         if blockade_id:
             self.move_nearest_blockade(time_step, blockade_id)
         else:
-            self.random_walk()
+            path = self.random_walk()
+            self.send_move(time_step, path)
 
     def move_nearest_blockade(self, time_step, blockade_id):
         x, y = self.me().get_x(), self.me().get_y()

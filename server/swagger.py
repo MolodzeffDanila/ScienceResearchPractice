@@ -23,8 +23,14 @@ civilian_model = api.model("Civilian", {
     "id": fields.Integer(required=True, description="Идентификатор гражданского"),
     "position": fields.Integer(required=True, description="Позиция гражданского в симуляции"),
     "hp": fields.Integer(required=True, description="Очки здоровья (HP) гражданского"),
-    "buriness": fields.Integer(required=True, description="Насколько гражданский завален (0 — не завален, 100 — полностью)")
+    "buriness": fields.Integer(required=True, description="Насколько гражданский завален (0 — не завален, 100 — полностью)"),
+    "x": fields.Integer(required=True, description="Координата X"),
+    "y": fields.Integer(required=True, description="Координата Y")
 })
+
+civilian_delete_model = api.model('DeleteCivilian', {
+        'id': fields.Integer(required=True, description='ID гражданского для удаления')
+    })
 
 visited_model = api.model("Visited", {
     "id": fields.Integer(required=True, description="Идентификатор здания"),

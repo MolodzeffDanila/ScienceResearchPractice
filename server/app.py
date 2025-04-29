@@ -6,7 +6,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from db_setup import Burning, Civilians, SessionLocal, clear_all_data, Base, engine
 from server.db_setup import Visited, Blockade
 from server.dto import CivilianInput, BurningInput
-from server.swagger import burning_model, api, civilian_model, visited_model, app, blockade_assignment_model
+from server.swagger import burning_model, api, civilian_model, visited_model, app, blockade_assignment_model, \
+    civilian_delete_model
 
 
 @app.route("/")
@@ -84,7 +85,9 @@ class CiviliansResource(Resource):
                     id=civ.id,
                     position=civ.position,
                     hp=civ.hp,
-                    buriness=civ.buriness
+                    buriness=civ.buriness,
+                    x=civ.x,
+                    y=civ.y
                 )
                 session.merge(civilian)
             session.commit()
@@ -93,6 +96,39 @@ class CiviliansResource(Resource):
 
         except ValidationError as e:
             return {"error": e.errors()}, 400
+
+        except Exception as e:
+            session.rollback()
+            return {"error": str(e)}, 500
+
+        finally:
+            session.close()
+
+@api.route("/civilians/delete")
+class CiviliansDeleteResource(Resource):
+    @api.doc(description="Удалить гражданского по ID через POST-запрос")
+    @api.expect([civilian_delete_model])
+    @api.response(200, "Удалено успешно")
+    @api.response(400, "ID не передан")
+    @api.response(404, "Гражданский не найден")
+    @api.response(500, "Ошибка сервера")
+    def post(self):
+        session = SessionLocal()
+        try:
+            data = request.get_json()
+
+            if not data or 'id' not in data:
+                return {"error": "ID is required"}, 400
+
+            civ_id = data['id']
+            civilian = session.query(Civilians).filter(Civilians.id == civ_id).first()
+
+            if civilian:
+                session.delete(civilian)
+                session.commit()
+                return {"status": "deleted"}, 200
+            else:
+                return {"error": "Civilian not found"}, 404
 
         except Exception as e:
             session.rollback()
@@ -183,6 +219,7 @@ def run_app():
 
 
 if __name__ == "__main__":
+    #Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     clear_all_data()
     run_app()

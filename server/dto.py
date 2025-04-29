@@ -5,6 +5,8 @@ class CivilianInput(BaseModel):
     position: int
     hp: int
     buriness: int
+    x: int
+    y: int
 
 class BurningInput(BaseModel):
     id: int

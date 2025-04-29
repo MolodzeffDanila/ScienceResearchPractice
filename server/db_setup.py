@@ -13,6 +13,8 @@ class Civilians(Base):
     position = Column(Integer)
     hp = Column(Integer)
     buriness = Column(Integer)
+    x = Column(Integer)
+    y = Column(Integer)
 
 class Burning(Base):
     __tablename__ = 'burning'

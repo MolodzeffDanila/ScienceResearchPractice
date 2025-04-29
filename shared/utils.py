@@ -18,7 +18,9 @@ def civilians_to_json(civilians: list[Human]):
         "id": civ.get_id().get_value(),
         "position": civ.get_position().get_value(),
         "hp": civ.get_hp(),
-        "buriness": civ.get_buriedness()
+        "buriness": civ.get_buriedness(),
+        "x": civ.get_x(),
+        "y": civ.get_y()
     }, civilians))
 
 def burning_to_json(burning: list[Building]):

@@ -127,7 +127,10 @@ class PoliceForceAgent(Agent):
 
     def get_sorted_buildings(self):
         x, y = self.me().get_x(), self.me().get_y()
-        buildings = [e for e in self.world_model.get_entities() if isinstance(e, Building) and e not in self.visited_houses and self.is_build_has_blockaded_roads(e)]
+        buildings = [e for e in self.world_model.get_entities()
+                     if isinstance(e, Building)
+                     and e not in self.visited_houses
+                     and self.is_build_has_blockaded_roads(e)]
         buildings.sort(key=lambda b: abs(b.get_x() - x) + abs(b.get_y() - y))
         return buildings
 
@@ -197,18 +200,6 @@ class PoliceForceAgent(Agent):
             best = candidates[0][1]
 
         return best
-
-    def score_blockade(self, blockade):
-        position_entity = self.world_model.get_entity(blockade.get_position())
-        neighbors = self.get_neighbors(position_entity)
-
-        score = len(neighbors)
-        humans = self.civilians
-
-        for road in neighbors:
-            if any(h.get_position() == road.get_id() and h.get_buriedness() > 0 for h in humans):
-                score += 3
-        return score
 
     def get_nearest_blockade(self):
         best_distance = sys.maxsize

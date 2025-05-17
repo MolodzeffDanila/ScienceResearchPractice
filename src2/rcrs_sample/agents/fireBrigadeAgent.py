@@ -69,8 +69,7 @@ class FireBrigadeAgent(Agent):
         x, y = self.me().get_x(), self.me().get_y()
 
         entities = self.world_model.get_entities()
-        buildings = [entity for entity in entities if isinstance(entity, Building)]
-        buildings = [build for build in buildings if build.fieryness.value > 0]
+        buildings = self.get_burning_buildings()
 
         if buildings:
             requests.post(f'{SERVER_HOST}/burning', json=burning_to_json(buildings))
@@ -99,6 +98,9 @@ class FireBrigadeAgent(Agent):
                 return
             self.move_nearest_blockade_on_path(time_step, path)
             self.send_move(time_step, path)
+
+    def get_burning_buildings(self):
+        return [e for e in self.world_model.get_entities() if isinstance(e, Building) and e.get_fieryness() > 0]
 
     def find_way(self, entity_id):
         target = self.world_model.get_entity(entity_id)

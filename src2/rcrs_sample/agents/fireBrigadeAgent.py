@@ -12,9 +12,9 @@ from rcrs_core.entities.road import Road
 from rcrs_core.worldmodel.entityID import EntityID
 
 from server.constants import SERVER_HOST
+from shared.node import Node
 from shared.reqs import get_burning_from_server
 from shared.utils import burning_to_json, building_priority, from_id_list_to_entity_id
-from src.agents.node import Node
 import requests
 
 WATER_OUT = 1000

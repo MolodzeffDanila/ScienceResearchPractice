@@ -6,7 +6,7 @@ app = Flask("centralized")
 api = Api(
     app,
     version="1.0",
-    title="RCRS API",
+    title="RCRS Decision Tree Agent",
     description="API для симуляции спасательных агентов",
     doc="/",
     default="Requests",
